@@ -229,46 +229,30 @@
     a.sort(function(x,y){return y.score-x.score;}); a=a.slice(0,50);
     localStorage.setItem(LB_PREFIX+m,JSON.stringify(a));
   }
-  // --- online layer (artifact DB) + fallback về local ---
-  var DB=null, UID=null, CANWRITE=false, onlineDocs=null, overMode="classic";
+  // --- online layer: Google Sheet qua JSONP + fallback local ---
+  var EXEC="https://script.google.com/macros/s/AKfycbyb5gZBCISmAjKYYw61zYqQSgSKYcuIGCeD12RZnBYer49gagg4PjKUfXNrPVxRjGKOmQ/exec";
+  var PID=(function(){ try{ var k='daonao_pid',v=localStorage.getItem(k); if(!v){ v='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem(k,v); } return v; }catch(e){ return 'p'+Math.random().toString(36).slice(2,10); } })();
+  var onlineRows={}, overMode="classic", _cbN=0;
+  function jsonp(url){ return new Promise(function(res,rej){ var cb='__dn_cb'+(++_cbN); var s=document.createElement('script'); var done=false;
+    window[cb]=function(data){ done=true; try{delete window[cb];}catch(e){window[cb]=undefined;} if(s.parentNode)s.parentNode.removeChild(s); res(data); };
+    s.onerror=function(){ if(done)return; try{delete window[cb];}catch(e){} if(s.parentNode)s.parentNode.removeChild(s); rej(new Error('net')); };
+    s.src=url+(url.indexOf('?')<0?'?':'&')+'callback='+cb; document.head.appendChild(s);
+    setTimeout(function(){ if(!done){ try{delete window[cb];}catch(e){} if(s.parentNode)s.parentNode.removeChild(s); rej(new Error('timeout')); } },12000);
+  }); }
+  function fetchTop(m){ jsonp(EXEC+'?action=top&limit=20&mode='+encodeURIComponent(m)).then(function(d){ if(d&&d.ok&&d.rows){ onlineRows[m]=d.rows.map(function(r){return {name:String(r.name||'?'),score:Number(r.score)||0};}); refreshVisibleBoard(); } }).catch(function(){}); }
+  function submitOnline(m,name,score){ if(!(score>0))return; jsonp(EXEC+'?action=submit&player_id='+encodeURIComponent(PID)+'&mode='+encodeURIComponent(m)+'&score='+score+'&name='+encodeURIComponent(name)).then(function(){ fetchTop(m); }).catch(function(){}); }
   function boardRows(m){
     var map={};
-    if(onlineDocs){ for(var i=0;i<onlineDocs.length;i++){ var d=onlineDocs[i]; var sc=d.s[m]||0; if(sc>0 && (!(d.name in map)||sc>map[d.name])) map[d.name]=sc; } }
+    var orow=onlineRows[m]; if(orow){ for(var i=0;i<orow.length;i++){ var d=orow[i]; if(d.score>0 && (!(d.name in map)||d.score>map[d.name])) map[d.name]=d.score; } }
     var loc=lbTop(m,50); for(var j=0;j<loc.length;j++){ var r=loc[j]; if(!(r.name in map)||r.score>map[r.name]) map[r.name]=r.score; }
     var rows=[]; for(var n in map){ if(map.hasOwnProperty(n)) rows.push({name:n,score:map[n]}); }
     rows.sort(function(a,b){return b.score-a.score;}); return rows.slice(0,8);
   }
   function refreshVisibleBoard(){ try{ if(state==="over") renderBoard($("boardOver"),overMode,playerName); else if(!$("menu").classList.contains("hidden")) renderMenuBoard(); }catch(e){} }
-  function initDB(){
-    if(!(window.claude && typeof claude.use==="function")) return;
-    var pdb=Promise.resolve(claude.use("db")).catch(function(){return null;});
-    var pu=Promise.resolve(claude.use("user")).catch(function(){return null;});
-    Promise.all([pdb,pu]).then(function(res){
-      DB=res[0]||null; var user=res[1]||null; if(!DB) return;
-      try{ DB.collection("scores").onSnapshot(function(snap){
-        var arr=[]; snap.docs.forEach(function(d){ try{ var x=d.data()||{}; arr.push({id:d.id,name:String(x.name||"?").slice(0,14),s:{classic:+x.classic||0,blitz:+x.blitz||0,time:+x.time||0,chaos:+x.chaos||0}}); }catch(e){} });
-        onlineDocs=arr; refreshVisibleBoard();
-      }, function(){ onlineDocs=null; refreshVisibleBoard(); }); }catch(e){ onlineDocs=null; }
-      if(user){
-        try{ Promise.resolve(user.id()).then(function(id){ UID=id||null; }).catch(function(){}); }catch(e){}
-        try{ if(typeof user.can==="function") Promise.resolve(user.can("data.write")).then(function(c){ CANWRITE=!!c; }).catch(function(){}); }catch(e){}
-      }
-    }).catch(function(){});
-  }
-  function submitOnline(m,name,score){
-    if(!DB||!UID||!CANWRITE) return;
-    try{
-      var mine=null; if(onlineDocs){ for(var i=0;i<onlineDocs.length;i++){ if(onlineDocs[i].id===UID){ mine=onlineDocs[i]; break; } } }
-      var cur=mine?mine.s:{classic:0,blitz:0,time:0,chaos:0};
-      if(score<=(cur[m]||0)) return;
-      var body={name:name,classic:cur.classic||0,blitz:cur.blitz||0,time:cur.time||0,chaos:cur.chaos||0,updated:Date.now()};
-      body[m]=score; DB.doc("scores/"+UID).set(body).catch(function(){});
-    }catch(e){}
-  }
   var MEDALS=["🥇","🥈","🥉"];
   function renderBoard(el,m,highlight){
     el.innerHTML="";
-    var online=(onlineDocs!==null);
+    var online=(onlineRows[m]!==undefined);
     var h=document.createElement("h4"); h.textContent="🏆 BẢNG XẾP HẠNG · "+MODES[m].name+(online?" 🌐":""); el.appendChild(h);
     var rows=boardRows(m);
     if(!rows.length){ var e=document.createElement("div"); e.className="bempty"; e.textContent="Chưa có ai. Hãy là người đầu tiên ghi tên! 🔥"; el.appendChild(e); return; }
@@ -353,7 +337,7 @@
     MODE_KEYS.forEach(function(k){ var m=MODES[k]; var d=document.createElement("div"); d.className="mode"+(k===selMode?" sel":""); d.setAttribute("data-mode",k);
       var mn=document.createElement("div"); mn.className="mn"; mn.textContent=m.icon+" "+m.name;
       var md=document.createElement("div"); md.className="md"; md.textContent=m.desc;
-      d.appendChild(mn); d.appendChild(md); d.onclick=function(){ selMode=k; buildModes(); renderMenuBoard(); }; box.appendChild(d); }); }
+      d.appendChild(mn); d.appendChild(md); d.onclick=function(){ selMode=k; buildModes(); renderMenuBoard(); fetchTop(k); }; box.appendChild(d); }); }
   function setRule(r){ rule=r;
     if(r==="ink"){ ruleLabel.textContent="CHẠM MÀU MỰC"; ruleEl.className="ink"; ruleIc.textContent="🎨"; }
     else{ ruleLabel.textContent="CHẠM NGHĨA CHỮ"; ruleEl.className="word"; ruleIc.textContent="🔤"; } }
@@ -417,7 +401,7 @@
     modeTag.textContent=mode.icon+" "+mode.name; bestEl.textContent=getBest(selMode); updateHud(); state="play";
     if(mode.type==="time") globalDeadline=performance.now()+mode.start;
     newPrompt(); MUSIC.start(mode.bpm); cancelAnimationFrame(raf); raf=requestAnimationFrame(loop); }
-  function toMenu(){ MUSIC.stop(); state="menu"; $("over").classList.add("hidden"); $("menu").classList.remove("hidden"); buildModes(); renderMenuBoard(); }
+  function toMenu(){ MUSIC.stop(); state="menu"; $("over").classList.add("hidden"); $("menu").classList.remove("hidden"); buildModes(); renderMenuBoard(); fetchTop(selMode); }
 
   // ---------- name gate ----------
   function showGate(prefill){ var inp=$("nameInput"); inp.value=prefill||""; $("menu").classList.add("hidden"); $("over").classList.add("hidden"); $("nameGate").classList.remove("hidden"); setTimeout(function(){ try{inp.focus();}catch(e){} },50); }
@@ -428,7 +412,7 @@
     $("whoami").innerHTML=""; var t=document.createTextNode("Xin chào, "); var b=document.createElement("b"); b.textContent=playerName;
     var a=document.createElement("a"); a.textContent="đổi tên"; a.onclick=function(){ showGate(playerName); };
     $("whoami").appendChild(t); $("whoami").appendChild(b); $("whoami").appendChild(a);
-    buildModes(); renderMenuBoard(); }
+    buildModes(); renderMenuBoard(); fetchTop(selMode); }
   $("nameOk").onclick=enterName;
   $("nameInput").addEventListener("keydown",function(e){ if(e.key==="Enter") enterName(); });
 
@@ -442,9 +426,8 @@
     $("whoami").innerHTML=""; var t=document.createTextNode("Xin chào, "); var b=document.createElement("b"); b.textContent=playerName;
     var a=document.createElement("a"); a.textContent="đổi tên"; a.onclick=function(){ showGate(playerName); };
     $("whoami").appendChild(t); $("whoami").appendChild(b); $("whoami").appendChild(a);
-    renderMenuBoard(); }
+    renderMenuBoard(); fetchTop(selMode); }
   else { showGate(""); }
-  initDB();
 })();
 </script>
 </body>
