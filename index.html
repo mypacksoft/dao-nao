@@ -4,6 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>ĐẢO NÃO — Game hack não cực khó</title>
+<meta name="theme-color" content="#070711">
+<meta name="description" content="Game hack não cực khó: chạm đúng màu mực, luật đảo liên tục. Có bảng xếp hạng toàn cầu.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ĐẢO NÃO">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Be+Vietnam+Pro:wght@500;700;800&display=swap" rel="stylesheet">
@@ -176,6 +185,15 @@
   <div id="modes"></div>
   <div class="board" id="boardMenu"></div>
   <button class="btn" id="startBtn">BẮT ĐẦU</button>
+  <button class="btn2" id="installBtn" style="display:none; margin-top:14px">📲 Cài vào máy (iOS / Android)</button>
+</div>
+
+<!-- INSTALL HELP -->
+<div class="overlay hidden" id="iosHelp">
+  <div class="tag" id="helpTag">CÀI VÀO MÁY</div>
+  <h1 class="display" style="font-size:clamp(30px,9vw,56px); letter-spacing:2px">Cài về màn hình chính</h1>
+  <div class="sub" id="helpBody" style="max-width:420px"></div>
+  <button class="btn" id="iosClose">ĐÃ HIỂU</button>
 </div>
 
 <!-- GAME OVER -->
@@ -428,6 +446,38 @@
     $("whoami").appendChild(t); $("whoami").appendChild(b); $("whoami").appendChild(a);
     renderMenuBoard(); fetchTop(selMode); }
   else { showGate(""); }
+
+  // ---------- PWA: cài vào máy ----------
+  (function(){
+    var deferred=null, btn=$("installBtn"), help=$("iosHelp"), body2=$("helpBody"), tag=$("helpTag");
+    function standalone(){ return (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true; }
+    function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1); }
+    function showBtn(){ if(btn && !standalone()) btn.style.display="inline-block"; }
+    function hideBtn(){ if(btn) btn.style.display="none"; }
+    if(!standalone()) showBtn();
+    window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); deferred=e; showBtn(); });
+    window.addEventListener('appinstalled',function(){ deferred=null; hideBtn(); });
+
+    function showHelp(){
+      if(isIOS()){
+        tag.textContent="CÀI VÀO IPHONE / IPAD";
+        body2.innerHTML='Trên <b>Safari</b>:<br>1️⃣ Nhấn nút <b>Chia sẻ</b> ⬆️ ở thanh bên dưới.<br>2️⃣ Kéo xuống chọn <b>«Thêm vào MH chính»</b>.<br>3️⃣ Nhấn <b>Thêm</b> ở góc trên.<br><br>Xong! Icon <b>ĐẢO NÃO</b> hiện ngoài màn hình như một app thật. 🎮';
+      } else {
+        tag.textContent="CÀI VÀO ANDROID";
+        body2.innerHTML='Trên <b>Chrome</b>:<br>1️⃣ Nhấn menu <b>⋮</b> góc phải trên.<br>2️⃣ Chọn <b>«Cài đặt ứng dụng»</b> (hoặc <b>«Thêm vào MH chính»</b>).<br>3️⃣ Nhấn <b>Cài đặt</b>.<br><br>Xong! Icon <b>ĐẢO NÃO</b> hiện ngoài màn hình như một app thật. 🎮';
+      }
+      help.classList.remove("hidden");
+    }
+    if(btn) btn.onclick=function(){
+      if(deferred){ deferred.prompt(); deferred.userChoice.then(function(){ deferred=null; hideBtn(); }); return; }
+      showHelp();
+    };
+    $("iosClose").onclick=function(){ help.classList.add("hidden"); };
+
+    if('serviceWorker' in navigator){
+      window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+    }
+  })();
 })();
 </script>
 </body>
