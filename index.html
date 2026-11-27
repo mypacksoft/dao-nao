@@ -447,6 +447,12 @@
     renderMenuBoard(); fetchTop(selMode); }
   else { showGate(""); }
 
+  // ---------- đồng bộ điểm local -> online + tự làm mới bảng ----------
+  function syncLocalToOnline(){ if(!playerName) return; MODE_KEYS.forEach(function(m){ var b=getBest(m); if(b>0) submitOnline(m, playerName, b); }); }
+  if(playerName) setTimeout(syncLocalToOnline, 800);
+  (function(){ var _en=enterName; enterName=function(){ _en(); setTimeout(syncLocalToOnline, 600); }; $("nameOk").onclick=enterName; $("nameInput").addEventListener("keydown",function(e){ if(e.key==="Enter") enterName(); }); })();
+  setInterval(function(){ try{ if(state==="over") fetchTop(overMode); else if(!$("menu").classList.contains("hidden")) fetchTop(selMode); }catch(e){} }, 12000);
+
   // ---------- PWA: cài vào máy ----------
   (function(){
     var deferred=null, btn=$("installBtn"), help=$("iosHelp"), body2=$("helpBody"), tag=$("helpTag");
